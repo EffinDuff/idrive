@@ -56,15 +56,16 @@ jobs:
             test -d /opt/idriveIt.defaults
             cd /opt/IDriveForLinux/bin && ./idrive --about < /dev/null || true
             grep "Build [0-9]" readme.txt | tail -1 || true'
-          docker run -d --name t idrive:test
+          docker run -d --name idrive-test idrive:test
           sleep 15
-          docker logs t
-          docker logs t 2>&1 | grep -q "container starting"
-          docker logs t 2>&1 | grep -q "No IDrive account configured yet"
-          docker exec t test -L /etc/idrivecrontab.json
-          docker exec t test -L /etc/idrivecron
-          docker stop -t 10 t
-          docker logs t 2>&1 | grep -q "Stopping IDrive services"
+          docker logs idrive-test
+          docker logs idrive-test 2>&1 | grep -q "container starting"
+          docker logs idrive-test 2>&1 | grep -q "No IDrive account configured yet"
+          docker exec idrive-test test -L /etc/idrivecrontab.json
+          docker exec idrive-test test -L /etc/idrivecron
+          docker exec idrive-test bash -c "pgrep -f 'idrivecron --cron' >/dev/null || ! compgen -G '/opt/IDriveForLinux/idriveIt/user_profile/*/*' >/dev/null"   # healthcheck passes
+          docker stop -t 10 idrive-test
+          docker logs idrive-test 2>&1 | grep -q "Stopping IDrive services"
 
       - name: Log in to Docker Hub
         if: env.PUBLISH == 'true'
