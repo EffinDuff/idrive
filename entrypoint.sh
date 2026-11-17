@@ -2,8 +2,8 @@
 # IDrive container entrypoint
 #  - seeds/repairs the persistent idriveIt volume
 #  - keeps the scheduler file (/etc/idrivecrontab.json) on the volume
-#  - starts the IDrive cron + dashboard services WITHOUT needing the interactive menu
-#  - watches them and restarts them if they die
+#  - starts the IDrive cron service (which starts the dashboard) WITHOUT the interactive menu
+#  - restarts cron if it dies (gives up after 5 attempts) and logs dashboard state changes
 set -u
 
 IDRIVE_BIN="/opt/IDriveForLinux/bin"
@@ -26,8 +26,8 @@ mkdir -p "$IDRIVE_IT"
 # Copy anything missing from the image defaults (never overwrites your data)
 cp -an "$DEFAULTS/." "$IDRIVE_IT/" 2>/dev/null
 # The transfer engines must match the installed package version, so always refresh them
-for f in idevsutil idevsutil_dedup; do
-    [ -f "$DEFAULTS/$f" ] && cp -f "$DEFAULTS/$f" "$IDRIVE_IT/$f"
+for f in "$DEFAULTS"/idevsutil*; do
+    [ -f "$f" ] && cp -f "$f" "$IDRIVE_IT/"
 done
 
 # --- Persist the scheduler -----------------------------------------------------
@@ -49,24 +49,41 @@ ln -snf "$IDRIVE_BIN/idrive" /etc/idrivecron
 # --- Service management --------------------------------------------------------
 account_configured() { compgen -G "$IDRIVE_IT/user_profile/*/*" >/dev/null; }
 
+CRON_FAILS=0
+MAX_CRON_RESTARTS=5
+DASH_REPORTED=""
+
+# The IDrive cron service starts the dashboard itself
+# (3.16: "idrive --dashboard"; older builds: "python/dashboard start").
+dashboard_running() { pgrep -f -- 'idrive --dashboard|python/dashboard' >/dev/null; }
+
 start_cron() {
-    if ! pgrep -f 'idrivecron --cron' >/dev/null; then
-        log "Starting IDrive cron service"
-        (cd "$IDRIVE_BIN" && nohup /etc/idrivecron --cron >/dev/null 2>&1 &)
-        sleep 20   # cron brings up the watcher service; give it a moment before the dashboard
+    pgrep -f 'idrivecron --cron' >/dev/null && { CRON_FAILS=0; return; }
+    if [ "$CRON_FAILS" -ge "$MAX_CRON_RESTARTS" ]; then
+        return   # already gave up; error was logged once
+    fi
+    CRON_FAILS=$((CRON_FAILS + 1))
+    log "Starting IDrive cron service (attempt $CRON_FAILS/$MAX_CRON_RESTARTS)"
+    (cd "$IDRIVE_BIN" && nohup /etc/idrivecron --cron >/dev/null 2>&1 &)
+    sleep 20
+    if ! pgrep -f 'idrivecron --cron' >/dev/null && [ "$CRON_FAILS" -ge "$MAX_CRON_RESTARTS" ]; then
+        log "ERROR: IDrive cron service keeps exiting. Open the console and run ./idrive to check the account; restart the container afterwards."
     fi
 }
 
-start_dashboard() {
-    if ! pgrep -f 'python/dashboard' >/dev/null; then
-        log "Starting IDrive dashboard service"
-        (cd "$IDRIVE_BIN" && nohup ./Idrivelib/dependencies/python/dashboard start >/dev/null 2>&1 &)
+report_dashboard() {
+    if dashboard_running; then
+        [ "$DASH_REPORTED" = up ] || log "IDrive dashboard service is running"
+        DASH_REPORTED=up
+    else
+        [ "$DASH_REPORTED" = down ] || log "IDrive dashboard service is not running (it is started by the cron service; check the account login with ./idrive)"
+        DASH_REPORTED=down
     fi
 }
 
 stop_all() {
     log "Stopping IDrive services"
-    pkill -TERM -f 'python/dashboard' 2>/dev/null
+    pkill -TERM -f -- 'idrive --dashboard|python/dashboard' 2>/dev/null
     pkill -TERM -f "$IDRIVE_BIN/idrive" 2>/dev/null
     pkill -TERM -f 'idrivecron' 2>/dev/null
     sleep 3
@@ -85,7 +102,7 @@ fi
 while true; do
     if account_configured; then
         start_cron
-        start_dashboard
+        report_dashboard
     fi
     sleep "$CHECK_INTERVAL" &
     wait $!
