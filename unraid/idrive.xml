@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>iDrive</Name>
+  <Repository>effinduff/idrive:latest</Repository>
+  <Registry>https://hub.docker.com/r/effinduff/idrive</Registry>
+  <Network>host</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/EffinDuff/idrive</Support>
+  <Project>https://www.idrive.com/online-backup-linux-scripts</Project>
+  <Overview>IDrive for Linux backup client. All settings (account, backup set, schedule, logs) persist in the appdata path. Anything you map under /mnt/backup/ is included automatically when the backup set is /mnt/backup/. First run: open Console, cd /opt/IDriveForLinux/bin and run ./idrive to log in.</Overview>
+  <Category>Backup:</Category>
+  <TemplateURL>https://raw.githubusercontent.com/EffinDuff/idrive/main/unraid/idrive.xml</TemplateURL>
+  <ExtraParams></ExtraParams>
+  <Config Name="IDrive config (appdata)" Target="/opt/IDriveForLinux/idriveIt" Default="/mnt/user/appdata/idrive" Mode="rw" Description="Account, backup set, scheduler and logs. Must be persistent." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/idrive</Config>
+  <Config Name="Backup: Lightroom" Target="/mnt/backup/Lightroom" Default="/mnt/user/Lightroom/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/Lightroom/</Config>
+  <Config Name="Backup: calibre" Target="/mnt/backup/calibre" Default="/mnt/user/calibre/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/calibre/</Config>
+  <Config Name="Backup: appdatabackup" Target="/mnt/backup/appdatabackup" Default="/mnt/disk1/AppDataBackup/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/disk1/AppDataBackup/</Config>
+  <Config Name="Backup: Paperless" Target="/mnt/backup/paperless" Default="/mnt/user/Paperless/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/Paperless/</Config>
+  <Config Name="Backup: PaperlessIngest" Target="/mnt/backup/PaperlessIngest" Default="/mnt/user/PaperlessIngest/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/PaperlessIngest/</Config>
+  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Timezone used for the backup schedule" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="Service check interval (s)" Target="IDRIVE_CHECK_INTERVAL" Default="60" Mode="" Description="How often the container checks that the IDrive scheduler/dashboard are running and restarts them" Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
+</Container>
