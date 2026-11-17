@@ -1,42 +1,49 @@
-FROM ubuntu:22.04
+# IDrive for Linux in a container, built for Unraid.
+# Rebuilding the image always pulls the newest IDrive package (the download URL is "latest").
+ARG UBUNTU_VERSION=26.04
+FROM ubuntu:${UBUNTU_VERSION}
 
-# Prevent interactive prompts during package install
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=America/New_York
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=America/New_York \
+    IDRIVE_HOME=/opt/IDriveForLinux
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    perl \
-    screen \
-    cron \
-    net-tools \
-    iproute2 \
-    nano \
-    vim \
-    tzdata \
-    ca-certificates \
-    expect \
-    python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget perl python3 expect \
+        procps tini tzdata cron screen \
+        net-tools iproute2 nano vim-tiny less \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install latest iDrive for Linux (auto-accept license)
-RUN wget -q https://www.idrivedownloads.com/downloads/linux/download-for-linux/linux-bin/idriveforlinux.bin -O /tmp/idriveforlinux.bin \
+# Install the current IDrive for Linux package (auto-accepts the license prompts).
+# A pristine copy of idriveIt is kept so an empty appdata volume can be seeded.
+# BUILD_DATE busts the layer cache so scheduled CI builds always re-download.
+# The build fails if the installed IDrive is older than MIN_IDRIVE_VERSION.
+ARG IDRIVE_URL=https://www.idrivedownloads.com/downloads/linux/linux-bin/idriveforlinux.bin
+ARG MIN_IDRIVE_VERSION=3.16
+ARG BUILD_DATE=unset
+RUN echo "build ${BUILD_DATE}" \
+    && wget -q "${IDRIVE_URL}" -O /tmp/idriveforlinux.bin \
     && chmod +x /tmp/idriveforlinux.bin \
     && printf 'a\ny\n' | /tmp/idriveforlinux.bin --install \
-    && rm /tmp/idriveforlinux.bin
+    && rm -f /tmp/idriveforlinux.bin \
+    && test -x ${IDRIVE_HOME}/bin/idrive \
+    && v=$(grep -o 'Build [0-9][0-9.]*' ${IDRIVE_HOME}/bin/readme.txt | tail -1 | cut -d' ' -f2) \
+    && echo "Installed IDrive ${v} (minimum ${MIN_IDRIVE_VERSION})" \
+    && [ "$(printf '%s\n%s\n' "${MIN_IDRIVE_VERSION}" "${v}" | sort -V | head -1)" = "${MIN_IDRIVE_VERSION}" ] \
+    && echo "${v}" > /opt/idrive-version \
+    && cp -a ${IDRIVE_HOME}/idriveIt /opt/idriveIt.defaults
 
-# Set working directory
-WORKDIR /opt/IDriveForLinux/bin
+LABEL org.opencontainers.image.source="https://github.com/EffinDuff/idrive"
 
-# Declare persistent volume for config/settings
-#VOLUME /opt/IDriveForLinux/idriveIt
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-#attempting to use without entrypoint script
+WORKDIR ${IDRIVE_HOME}/bin
 
-# Copy entrypoint script
-#COPY entrypoint.sh /entrypoint.sh
-#RUN chmod +x /entrypoint.sh
+# Everything IDrive needs to remember lives here — map it to appdata in Unraid.
+VOLUME ["/opt/IDriveForLinux/idriveIt"]
 
-#ENTRYPOINT ["/entrypoint.sh"]
+# Healthy if the IDrive scheduler is running, or if no account has been set up yet
+HEALTHCHECK --interval=5m --timeout=10s --start-period=2m \
+    CMD ["bash", "-c", "pgrep -f 'idrivecron --cron' >/dev/null || ! compgen -G '/opt/IDriveForLinux/idriveIt/user_profile/*/*' >/dev/null"]
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

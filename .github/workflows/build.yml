@@ -1,0 +1,99 @@
+name: Build & publish image
+
+on:
+  push:
+    branches: [main]
+  pull_request:            # build + test only, never pushes
+  schedule:
+    - cron: "17 7 * * 1"   # every Monday 07:17 UTC -> picks up new IDrive + Ubuntu patches
+  workflow_dispatch:
+    inputs:
+      ubuntu_version:
+        description: "Ubuntu base tag"
+        default: "26.04"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set build vars
+        id: vars
+        run: |
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "ubuntu=${{ github.event.inputs.ubuntu_version || '26.04' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          pull: true
+          no-cache: true
+          load: true
+          build-args: |
+            UBUNTU_VERSION=${{ steps.vars.outputs.ubuntu }}
+            BUILD_DATE=${{ steps.vars.outputs.date }}
+          tags: idrive:test
+
+      - name: Smoke test
+        run: |
+          set -x
+          docker run --rm --entrypoint bash idrive:test -c '
+            set -e
+            . /etc/os-release; echo "OS: $PRETTY_NAME"
+            test -x /opt/IDriveForLinux/bin/idrive
+            ls -la /opt/IDriveForLinux/idriveIt
+            test -d /opt/idriveIt.defaults
+            cd /opt/IDriveForLinux/bin && ./idrive --about < /dev/null || true
+            grep "Build [0-9]" readme.txt | tail -1 || true'
+          docker run -d --name idrive-test idrive:test
+          sleep 15
+          docker logs idrive-test
+          docker logs idrive-test 2>&1 | grep -q "container starting"
+          docker logs idrive-test 2>&1 | grep -q "No IDrive account configured yet"
+          docker exec idrive-test test -L /etc/idrivecrontab.json
+          docker exec idrive-test test -L /etc/idrivecron
+          docker exec idrive-test bash -c "pgrep -f 'idrivecron --cron' >/dev/null || ! compgen -G '/opt/IDriveForLinux/idriveIt/user_profile/*/*' >/dev/null"   # healthcheck passes
+          docker stop -t 10 idrive-test
+          docker logs idrive-test 2>&1 | grep -q "Stopping IDrive services"
+
+      - name: Log in to Docker Hub
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            UBUNTU_VERSION=${{ steps.vars.outputs.ubuntu }}
+            BUILD_DATE=${{ steps.vars.outputs.date }}
+          tags: |
+            effinduff/idrive:latest
+            effinduff/idrive:${{ steps.vars.outputs.date }}
+            ghcr.io/effinduff/idrive:latest
+            ghcr.io/effinduff/idrive:${{ steps.vars.outputs.date }}
