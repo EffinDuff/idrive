@@ -5,7 +5,7 @@ Runs the official [IDrive for Linux](https://www.idrive.com/online-backup-linux-
 - Ubuntu 26.04 LTS base, newest IDrive package installed at build time
 - Rebuilt automatically every Monday by GitHub Actions
 - All IDrive settings (account, backup set, scheduler, logs) live in one appdata folder, so they survive image updates and container rebuilds
-- IDrive's scheduler and dashboard services start on boot and are restarted if they stop
+- IDrive's scheduler (and through it the dashboard) starts on boot and is restarted if it stops
 - Backups are triggered nightly by an Unraid User Script that sends an Unraid notification with the result
 
 ## Images
@@ -21,14 +21,20 @@ Each build is also tagged with its date (`:YYYYMMDD`) so you can pin or roll bac
 
 ## 1. Install on Unraid
 
-### Option A — template (recommended)
-1. **Docker** tab → bottom of page → **Template repositories**, add:
-   `https://github.com/EffinDuff/idrive`
-   and click **Save**.
-2. **Docker** → **Add Container** → pick **iDrive** from the template dropdown.
-3. Review the settings (below) and click **Apply**.
+### Option A — template
+Unraid lists your own templates under **Docker** → **Add Container** → **Template** → *User-defined templates*. Those are XML files on the flash drive in `/boot/config/plugins/dockerMan/templates-user/`.
 
-### Option B — manual
+1. In the Unraid terminal, download the template:
+   ```bash
+   wget -O /boot/config/plugins/dockerMan/templates-user/my-iDrive-template.xml \
+     https://raw.githubusercontent.com/EffinDuff/idrive/main/unraid/idrive.xml
+   ```
+2. **Docker** → **Add Container** → **Template** → pick **iDrive-template** under *User-defined templates* (Unraid shows the file name without the `my-` prefix).
+3. Review the settings (below), change the share paths to your own, and click **Apply**.
+
+> Don't overwrite an existing `my-iDrive.xml` — that's the saved config of a container you already have, and **Edit** uses it.
+
+### Option B — manual (no template)
 **Docker** → **Add Container**, then:
 
 | Field | Value |
@@ -170,7 +176,7 @@ GHCR uses the built-in `GITHUB_TOKEN`; no secret needed. Make the GHCR package p
 - `entrypoint.sh` (run under `tini`):
   - copies any missing default files into the appdata volume without overwriting yours, and refreshes the IDrive transfer engine binaries to match the installed package
   - links `/etc/idrivecrontab.json` (IDrive's scheduler file) to the appdata volume so schedules persist
-  - starts `idrivecron --cron` and the IDrive dashboard, and restarts them if they stop
+  - starts the IDrive cron service (`idrivecron --cron`), which starts the dashboard; restarts cron if it stops (gives up after 5 tries with an ERROR in the container log)
 - `unraid/idrive.xml` — Unraid container template
 - `unraid/userscript-idrive-backup.sh` — nightly backup User Script
 
