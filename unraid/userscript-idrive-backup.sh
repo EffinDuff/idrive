@@ -26,9 +26,20 @@ fi
 
 START=$(date +%s)
 echo "$(date) starting IDrive backup"
-docker exec "$CONTAINER" /bin/bash -c "cd /opt/IDriveForLinux/bin && ./idrive -b"
-RC=$?
+OUT=$(mktemp)
+# TERM=dumb stops IDrive's "tput: No value for $TERM" warning; sed strips colour codes
+docker exec -e TERM=dumb "$CONTAINER" /bin/bash -c "cd /opt/IDriveForLinux/bin && ./idrive -b" 2>&1 \
+    | sed 's/\x1b\[[0-9;]*m//g' | tee "$OUT"
+RC=${PIPESTATUS[0]}
 echo "$(date) idrive exited rc=$RC"
+
+# IDrive exits 0 even when the account is logged out, so check its output
+if grep -qi "account is not configured" "$OUT"; then
+    rm -f "$OUT"
+    $NOTIFY -i alert -s "iDrive Backup FAILED" -d "IDrive account not configured - log in via ./idrive in the container console"
+    exit 1
+fi
+rm -f "$OUT"
 
 # Newest log written since this run started that has a final status in its name
 LATEST=$(find "$LOGDIR" -newermt "@$START" -type f \
