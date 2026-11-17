@@ -43,7 +43,8 @@ RUN set -e; \
     echo "${v}" > /opt/idrive-version; \
     cp -a ${IDRIVE_HOME}/idriveIt /opt/idriveIt.defaults
 
-LABEL org.opencontainers.image.source="https://github.com/EffinDuff/idrive"
+LABEL org.opencontainers.image.source="https://github.com/EffinDuff/idrive" \
+      net.unraid.docker.icon="https://raw.githubusercontent.com/EffinDuff/idrive/main/unraid/icon.png"
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
