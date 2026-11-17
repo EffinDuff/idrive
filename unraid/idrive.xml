@@ -11,6 +11,7 @@
   <Overview>IDrive for Linux backup client. All settings (account, backup set, schedule, logs) persist in the appdata path. Anything you map under /mnt/backup/ is included automatically when the backup set is /mnt/backup/. First run: open Console, cd /opt/IDriveForLinux/bin and run ./idrive to log in.</Overview>
   <Category>Backup:</Category>
   <TemplateURL>https://raw.githubusercontent.com/EffinDuff/idrive/main/unraid/idrive.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/EffinDuff/idrive/main/unraid/icon.png</Icon>
   <ExtraParams></ExtraParams>
   <Config Name="IDrive config (appdata)" Target="/opt/IDriveForLinux/idriveIt" Default="/mnt/user/appdata/idrive" Mode="rw" Description="Account, backup set, scheduler and logs. Must be persistent." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/idrive</Config>
   <Config Name="Backup: Lightroom" Target="/mnt/backup/Lightroom" Default="/mnt/user/Lightroom/" Mode="ro" Description="Source share (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/Lightroom/</Config>
