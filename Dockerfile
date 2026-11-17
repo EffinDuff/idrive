@@ -33,7 +33,8 @@ WORKDIR ${IDRIVE_HOME}/bin
 # Everything IDrive needs to remember lives here — map it to appdata in Unraid.
 VOLUME ["/opt/IDriveForLinux/idriveIt"]
 
+# Healthy if the IDrive scheduler is running, or if no account has been set up yet
 HEALTHCHECK --interval=5m --timeout=10s --start-period=2m \
-    CMD pgrep -f 'idrivecron --cron' >/dev/null || [ ! -d /opt/IDriveForLinux/idriveIt/user_profile ]
+    CMD ["bash", "-c", "pgrep -f 'idrivecron --cron' >/dev/null || ! compgen -G '/opt/IDriveForLinux/idriveIt/user_profile/*/*' >/dev/null"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
